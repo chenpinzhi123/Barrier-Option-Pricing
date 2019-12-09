@@ -72,18 +72,25 @@ if accurate(c_uo + c_ui, c_v):
 else:
     print("c_uo + c_ui != c_v 计算2.错误")
 
-b_mc = b_do
-c_v  = c_do
+b_mc = b_di
+c_v  = c_di
 SAll = b_mc.MonteCarloGenerate(_s, "XXX", 10000, int(_t*252), "XXX")
 mcsol = b_mc.MCSolver(SAll, )
 c_mc = mcsol["OptionPrice"].mean()
 print("Call Barrier            :",c_v)
 print("Call Barrier Monte Carlo:",c_mc)
 
+print("(Numerical) Analytical Greeks:")
 print("Delta: ", b_do.delta())
 print("Gamma: ", b_do.gamma())
 print("Vega:  ", b_do.vega())
 print("Theta: ", b_do.theta())
+
+print("Monte Carlo Greeks:")
+print("Delta: ", b_do.delta(mc=True, d=0.01, MC_lens=10000))
+print("Gamma: ", b_do.gamma(mc=True, d=0.01, MC_lens=10000))
+print("Vega:  ", b_do.vega(mc=True, d=0.01, MC_lens=10000))
+print("Theta: ", b_do.theta(mc=True, d=0.01, MC_lens=10000))
 
 # 4. 检验put
 
@@ -137,14 +144,14 @@ p_mc = mcsol["OptionPrice"].mean()
 print("Put Barrier            : ",p_v)
 print("Put Barrier Monte Carlo: ",p_mc)
 
-print("Analytical Greeks:")
+print("(Numerical) Analytical Greeks:")
 print("Delta: ", b_di.delta())
 print("Gamma: ", b_di.gamma())
 print("Vega:  ", b_di.vega())
 print("Theta: ", b_di.theta())
 
 print("Monte Carlo Greeks:")
-print("Delta: ", b_di.delta(mc=True, d=0.001, MC_lens=100000))
-print("Gamma: ", b_di.gamma(mc=True, d=0.001, MC_lens=100000))
-print("Vega:  ", b_di.vega(mc=True, d=0.001, MC_lens=100000))
-print("Theta: ", b_di.theta(mc=True, d=0.001, MC_lens=100000))
+print("Delta: ", b_di.delta(mc=True, d=0.01, MC_lens=10000))
+print("Gamma: ", b_di.gamma(mc=True, d=0.01, MC_lens=10000))
+print("Vega:  ", b_di.vega(mc=True, d=0.1, MC_lens=10000))
+print("Theta: ", b_di.theta(mc=True, d=0.1, MC_lens=10000))

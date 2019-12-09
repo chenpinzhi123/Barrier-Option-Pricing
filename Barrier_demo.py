@@ -99,10 +99,14 @@ class Barrier(Vanilla):
         
         try:
             mc = kwargs['mc']
-            if mc == True:
-                return self.MCSolve(s=s, t=t, **kwargs)
         except:
-            pass
+            mc = False
+        if mc == True:
+            if "s" not in kwargs:
+                kwargs["s"] = s
+            if "t" not in kwargs:
+                kwargs["t"] = t
+            return self.MCSolve(**kwargs)
         
         if self.typeflag == 'c':
             phi = 1
@@ -383,12 +387,12 @@ class Barrier(Vanilla):
 
         return OutPut
     
-    def MCSolve(self, s=None, t=None, MC_lens=10000, T_lens=None):
+    def MCSolve(self, s=None, t=None, MC_lens=100000, T_lens=None, **kwargs):
         if s == None:
             s = self.s
         if t == None:
             t = self.t
-
+        
         if T_lens == None:
             if self.timetype == 'days':
                 t_lens = t
