@@ -80,6 +80,11 @@ c_mc = mcsol["OptionPrice"].mean()
 print("Call Barrier            :",c_v)
 print("Call Barrier Monte Carlo:",c_mc)
 
+print("Delta: ", b_do.delta())
+print("Gamma: ", b_do.gamma())
+print("Vega:  ", b_do.vega())
+print("Theta: ", b_do.theta())
+
 # 4. 检验put
 
 p = Vanilla(_s, _k, _r, _q, _sigma, _t, "p")
@@ -131,3 +136,15 @@ mcsol = b_mc.MCSolver(SAll, )
 p_mc = mcsol["OptionPrice"].mean()
 print("Put Barrier            : ",p_v)
 print("Put Barrier Monte Carlo: ",p_mc)
+
+print("Analytical Greeks:")
+print("Delta: ", b_di.delta())
+print("Gamma: ", b_di.gamma())
+print("Vega:  ", b_di.vega())
+print("Theta: ", b_di.theta())
+
+print("Monte Carlo Greeks:")
+print("Delta: ", b_di.delta(mc=True, d=0.001, MC_lens=100000))
+print("Gamma: ", b_di.gamma(mc=True, d=0.001, MC_lens=100000))
+print("Vega:  ", b_di.vega(mc=True, d=0.001, MC_lens=100000))
+print("Theta: ", b_di.theta(mc=True, d=0.001, MC_lens=100000))
