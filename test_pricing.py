@@ -17,8 +17,10 @@ def accurate(v1, v2, acc=1e-7):
     else:
         return False
 
+np.random.seed(9999999)
+
 # 1. 计算Vanilla
-_s = 101
+_s = 102
 _k = 100
 _r = 0.025
 _q = 0.03
@@ -28,15 +30,22 @@ _typeflag = "c"
 
 c = Vanilla(_s, _k, _r, _q, _sigma, _t, _typeflag)
 c_v = c.valuation()
-print("Call Vanilla:            ",c_v)
 
 # 2. 计算Vanilla (Monte Carlo)
-c_ = c.MCSolve(T_lens=1000)
-print("Call Vanilla Monte Carlo:",c_)
+c1 = c.MCSolve(MC_lens=10000, T_lens=200, VarDeducMethod = None)
+c2 = c.MCSolve(MC_lens=10000, T_lens=200, VarDeducMethod = "Antithetic")
+c3 = c.MCSolve(MC_lens=10000, T_lens=200, VarDeducMethod = "Control")
+c4 = c.MCSolve(MC_lens=200, T_lens=100, VarDeducMethod = "Halton")
+
+print("Call Vanilla:            ",c_v)
+print("Call Vanilla Monte Carlo:",c1)
+print("Call Vanilla Antithetic :",c2)
+print("Call Vanilla Control    :",c3)
+print("Call Vanilla Halton     :",c4)
 
 # 3. 计算标准Barrier
 
-_h = 95
+_h = 98
 _rebate = 0
 
 b_do = Barrier(_s, _k, _r, _q, _sigma, _t, _h, _rebate, "do", "c")
@@ -70,10 +79,15 @@ else:
     print("c_uo + c_ui != c_v 计算2.错误")
 
 b_mc = b_do
-c_v  = c_do
-c_mc = b_do.MCSolve(MC_lens=10000)
-print("Call Barrier            :",c_v)
+c_ba  = c_do
+c_mc = b_do.MCSolve(MC_lens=10000, T_lens=200, VarDeducMethod = None)
+c_mc2= b_do.MCSolve(MC_lens=10000, T_lens=200, VarDeducMethod = "Antithetic")
+c_mc3= b_do.MCSolve(MC_lens=10000, T_lens=200, VarDeducMethod = "Control")
+
+print("Call Barrier            :",c_ba)
 print("Call Barrier Monte Carlo:",c_mc)
+print("Call Barrier Antithetic :",c_mc2)
+print("Call Barrier Control    :",c_mc3)
 
 print("(Numerical) Analytical Greeks:")
 print("Delta: ", b_do.delta())
@@ -90,21 +104,24 @@ print("Theta: ", b_do.theta(mc=True, d=0.01, MC_lens=10000))
 
 # 4. 检验有rebate的Barrier
 _h = 95
-_rebate = 10
+_rebate = 5
 
 b_di = Barrier(_s, _k, _r, _q, _sigma, _t, _h, _rebate, "do", "c")
 c_di = b_di.valuation()
 
 b_mc = b_di
-c_v  = c_di
+c_ba  = c_di
 
-c_mc = b_di.MCSolve(MC_lens=20000, T_lens=200)
+c_mc = b_di.MCSolve(MC_lens=10000, T_lens=200, VarDeducMethod = None)
+c_mc2= b_di.MCSolve(MC_lens=10000, T_lens=200, VarDeducMethod = "Antithetic")
+c_mc3= b_di.MCSolve(MC_lens=10000, T_lens=200, VarDeducMethod = "Control")
 
-print("Call Barrier (rebate > 0):",c_v)
+print("Call Barrier (rebate > 0):",c_ba)
 print("Call Barrier Monte Carlo :",c_mc)
+print("Call Barrier Antithetic  :",c_mc2)
+print("Call Barrier Control     :",c_mc3)
 
 # 5. 检验put
-
 
 p = Vanilla(_s, _k, _r, _q, _sigma, _t, "p")
 p_v = p.valuation()

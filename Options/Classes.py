@@ -9,7 +9,6 @@ import pandas as pd
 import numpy as np
 from scipy.stats import norm
 import copy
-import random
 
 class Vanilla:
     def __init__(self,_s, _k, _r, _q, _sigma, _t, _typeflag,
@@ -244,7 +243,7 @@ class Vanilla:
         return RandSeed
 
 
-    def MonteCarloGenerate(self, St, filename, MC_lens, T_lens, MCMethod = "Sobol" ):
+    def MonteCarloGenerate(self, St, filename, MC_lens, T_lens, MCMethod="Sobol"):
         '''
         ---------------------------------------------------------
         此函数用于使用MC方法生成模拟序列
@@ -252,24 +251,132 @@ class Vanilla:
         若使用普通方法，filename和MCMethod参数可以随意输入
         
         '''
-
         if MCMethod == "Sobol":
             Rand = self.QuasiRandSeed(filename, MC_lens, T_lens)
-        else:            
+        else:
             Rand = np.random.randn(MC_lens, T_lens)
+
+        mu = self.r - self.q
         
-        mu = self.r-self.q
         dt = self.t / T_lens
-        dS = (mu - 0.5*self.v**2) *dt +self.v *np.sqrt(dt) *Rand
         
-        dS = np.insert(dS,0,values = np.zeros(MC_lens), axis = 1)
+        dS = (mu - 0.5 * self.v ** 2) * dt + self.v * np.sqrt(dt) * Rand
+
+        dS = np.insert(dS, 0, values=np.zeros(MC_lens), axis=1)
+
+        Sr = np.cumsum(dS, axis=1)
+
+        SAll = St * np.exp(Sr)
+
+        return SAll
+
+
+    def Antithetic_MonteCarloGenerate(self, St, filename, MC_lens, T_lens, MCMethod="Sobol"):
+        '''
+        ---------------------------------------------------------
+        此函数用于使用MC方法生成模拟序列
+        MC方法可以选择"Sobol"或其他，使用Sobol方法需要给出对应的种子文件地址
+        若使用普通方法，filename和MCMethod参数可以随意输入
+
+        '''
+        if MCMethod == "Sobol":
+            Rand0 = self.QuasiRandSeed(filename, MC_lens, T_lens)
+        else:
+            Rand0 = np.random.randn(MC_lens, T_lens)
+        Rand1 = -Rand0
+        mu = self.r - self.q
+        dt = self.t / T_lens
         
-        Sr = np.cumsum(dS, axis = 1)
+        dS = (mu - 0.5 * self.v ** 2) * dt + self.v * np.sqrt(dt) * Rand0
+        dS1 = (mu - 0.5 * self.v ** 2) * dt + self.v * np.sqrt(dt) * Rand1
+
+        dS = np.insert(dS, 0, values=np.zeros(MC_lens), axis=1)
+        dS1 = np.insert(dS1, 0, values=np.zeros(MC_lens), axis=1)
+
+        Sr = np.cumsum(dS, axis=1)
+        Sr1 = np.cumsum(dS1, axis=1)
+
+        SAll = St * np.exp(Sr)
+        SAll1 = St * np.exp(Sr1)
+
+        mcsol1 = self.MCSolver(SAll, )
+        mcsol2 = self.MCSolver(SAll1, )
+
+        c_mc1 = (mcsol1["OptionPrice"] + mcsol2["OptionPrice"]) / 2
+        Optionprice = c_mc1.mean()
+
+        return Optionprice
+
+
+    def Control_MonteCarloGenerate(self, St, filename, MC_lens, T_lens, MCMethod="Sobol", MC1_lens=None):
+        """
+        MC_lens用于求出控制系数
+        MC1_lens用于进行第二次估计
+        在默认情况下，假设MC1_lens = MC_lens
+        """
+        if MC1_lens == None:
+            MC1_lens = MC_lens
         
-        SAll =St*np.exp(Sr)
-    
-        return SAll  
-    
+        mu = self.r - self.q
+        
+        SAll = self.MonteCarloGenerate(St, filename, MC_lens, T_lens, MCMethod)
+
+        Optionprice = self.MCSolver(SAll, )
+        Matcov = np.cov(Optionprice['OptionPrice'], Optionprice['LastPrice'])
+        Var_s = St ** 2 * np.exp(2 * mu * self.t) * (np.exp(self.t * self.v ** 2) - 1)
+        c = -Matcov[0, 1] / Var_s
+        Exp_s = St * np.exp(mu * self.t)
+
+        SAll_con = self.MonteCarloGenerate(St, filename, MC1_lens, T_lens, MCMethod)
+        Optionprice_con = self.MCSolver(SAll_con, )
+        Control_price = Optionprice_con['OptionPrice'] + c * (Optionprice_con['LastPrice'] - Exp_s)
+        
+        return Control_price.mean()
+
+    def GetHalton(self, num, base):
+        Seq = np.zeros(num)
+        NumBits = int(1 + np.ceil(np.log(num) / np.log(base)))
+        VetBase = [base ** (-1 * num) for num in range(1, NumBits + 1)]
+        # VetBase = base ** (-1*range(1, NumBits))
+        WorkVet = np.zeros(NumBits)
+        for i in range(1, num + 1):
+            j = 1
+            ok = 0
+            while ok == 0:
+                WorkVet[j - 1] = WorkVet[j - 1] + 1
+                if WorkVet[j - 1] < base:
+                    ok = 1
+                else:
+                    WorkVet[j - 1] = 0
+                    j = j + 1
+            Seq[i - 1] = np.dot(WorkVet, VetBase)
+        return Seq
+
+    def Halton_MonteCarloGenerate(self, St, filename, MC_lens, T_lens, MCMethod="Sobol",
+                                  base1=2, base2=7):
+        Halton_num = MC_lens * T_lens
+        H1 = self.GetHalton(Halton_num, base1)
+        H2 = self.GetHalton(Halton_num, base2)
+
+        Vlog = np.sqrt(-2 * np.log(H1))
+
+        Norm1 = np.multiply(np.array(np.cos(2 * np.pi * H2)), np.array(Vlog))
+        Norm2 = np.multiply(np.array(np.sin(2 * np.pi * H2)), np.array(Vlog))
+        Norm = np.array([Norm1, Norm2])
+
+        Rand = Norm.reshape((MC_lens * 2, T_lens))
+        # Rand = Rand.tolist()
+
+        mu = self.r - self.q
+
+        Nut = (mu - 0.5 * self.v ** 2) * self.t
+        Sit = self.v * np.sqrt(self.t)
+
+        price = St * np.exp(Nut + Sit * Rand) - self.k
+        price[price < 0] = 0
+
+        Optionprice = np.mean(np.exp(-self.r * self.t)*price)
+        return Optionprice
     
     def MCSolver(self, SAll):
         '''
@@ -280,7 +387,7 @@ class Vanilla:
         '''
         [SM, SN] = SAll.shape
     
-        OutPut = pd.DataFrame(np.zeros([SM,2]), columns = ['OptionPrice','LastPrice'])
+        OutPut = pd.DataFrame(np.zeros([SM,2]), columns = ['OptionPrice', 'LastPrice'])
         LastPrice = copy.deepcopy(SAll[:,-1])
         OptionPrice = copy.deepcopy(SAll[:,-1]) - self.k
         if self.typeflag == 'c':
@@ -295,7 +402,8 @@ class Vanilla:
         return OutPut
 
     
-    def MCSolve(self, s=None, t=None, MC_lens=10000, T_lens=None, **kwargs):
+    def MCSolve(self, s=None, t=None, MC_lens=10000, T_lens=None,
+                VarDeducMethod = "Control", **kwargs):
         if s == None:
             s = self.s
         if t == None:
@@ -305,23 +413,32 @@ class Vanilla:
             filename = kwargs["filename"]
         else:
             filename = None
-        
         if "MCMethod" in kwargs:
             MCMethod = kwargs["MCMethod"]
         else:
             MCMethod = None
+        if "MC1_lens" in kwargs:
+            MC1_lens = kwargs["MC1_lens"]
+        else:
+            MC1_lens = None
+        
         
         if T_lens == None:
             if self.timetype == 'days':
-                t_lens = t
+                T_lens = t
             elif self.timetype == 'years':
-                t_lens = int(t*252)
-            SAll = self.MonteCarloGenerate(s, filename, MC_lens, t_lens, MCMethod)
-        else:
-            SAll = self.MonteCarloGenerate(s, filename, MC_lens, T_lens, MCMethod)
+                T_lens = int(t*252)
         
-        mcsol = self.MCSolver(SAll)
-        est_prc = mcsol["OptionPrice"].mean()
+        if VarDeducMethod == None:        
+            SAll = self.MonteCarloGenerate(s, filename, MC_lens, T_lens, MCMethod)
+            mcsol = self.MCSolver(SAll)
+            est_prc = mcsol["OptionPrice"].mean()    
+        elif VarDeducMethod == "Antithetic":
+            est_prc = self.Antithetic_MonteCarloGenerate(s, filename, MC_lens, T_lens, MCMethod)
+        elif VarDeducMethod == "Control":
+            est_prc = self.Control_MonteCarloGenerate(s, filename, MC_lens, T_lens, MCMethod, MC1_lens)
+        elif VarDeducMethod == "Halton":          
+            est_prc = self.Halton_MonteCarloGenerate(s, filename, MC_lens, T_lens, MCMethod)
         return est_prc
 
 
@@ -631,7 +748,7 @@ class Barrier(Vanilla):
         '''
         [SM, SN] = SAll.shape
     
-        OutPut = pd.DataFrame(np.zeros([SM,2]), columns = ['OptionPrice','LastPrice'])
+        OutPut = pd.DataFrame(np.zeros([SM,2]), columns = ['OptionPrice', 'LastPrice'])
         LastPrice = copy.deepcopy(SAll[:,-1])
         OptionPrice = copy.deepcopy(SAll[:,-1]) - self.k
         if self.typeflag == 'c':
@@ -656,121 +773,13 @@ class Barrier(Vanilla):
             for i,Srow in enumerate(SAll):
                 if not (Srow > self.h).any():
                     OptionPrice[i] = self.rebate
-
+        
         OutPut['OptionPrice'] = OptionPrice*np.exp(-self.r*self.t)
         OutPut['LastPrice'] =  LastPrice      
 
         return OutPut
     
-    def __MCSolve_inefficient(self, MC_lens=10000, T_lens=None, **kwargs):
-        """
-        Deprecated: This is inefficient
-        """
-        try:
-            s = kwargs['s']
-        except:
-            s = self.s
-        try:
-            v = kwargs['v']
-        except:
-            v = self.v
-        try:
-            t = kwargs['t']
-            if self.timetype == 'days':
-                t = t/252
-        except:
-            t = self.t
-        try:
-            r = kwargs['r']
-        except:
-            r = self.r
-        try:
-            q = kwargs['q']
-        except:
-            q = self.q        
+    def Halton_MonteCarloGenerate(self, St, filename, MC_lens, T_lens, MCMethod="Sobol",
+                                  base1=2, base2=7):
         
-        option_prices = []
-        triggered = False
-        
-        mu = r - q
-        if T_lens == None:
-            T_lens = int(t*252)
-        dt = t / T_lens
-        
-        if self.barrier == "do":
-            for i in range(MC_lens):
-                s1 = s
-                for j in range(T_lens):
-                    rand = random.gauss(0, 1)
-                    dS = (mu - 0.5*v**2) * dt + v*np.sqrt(dt) * rand
-                    s1 *= np.exp(dS)
-                    if s1 < self.h:
-                        triggered = True
-                        option_prices.append(self.rebate)
-                        break
-                if not triggered:
-                    if self.typeflag == 'c':
-                        option_prices.append(max(s1 - self.k, 0))
-                    elif self.typeflag == 'p':
-                        option_prices.append(max(self.k - s1, 0))
-                triggered = False
-        
-        elif self.barrier == "uo":
-            for i in range(MC_lens):
-                s1 = s
-                for j in range(T_lens):
-                    rand = random.gauss(0, 1)
-                    dS = (mu - 0.5*v**2) * dt + v*np.sqrt(dt) * rand
-                    s1 *= np.exp(dS)
-                    if s1 > self.h:
-                        triggered = True
-                        option_prices.append(self.rebate)
-                        break
-                if not triggered:
-                    if self.typeflag == 'c':
-                        option_prices.append(max(s1 - self.k, 0))
-                    elif self.typeflag == 'p':
-                        option_prices.append(max(self.k - s1, 0))
-                triggered = False
-
-        if self.barrier == "di":
-            for i in range(MC_lens):
-                s1 = s
-                for j in range(T_lens):
-                    rand = random.gauss(0, 1)
-                    dS = (mu - 0.5*v**2) * dt + v*np.sqrt(dt) * rand
-                    s1 *= np.exp(dS)
-                    if s1 < self.h:
-                        triggered = True
-                if triggered:
-                    if self.typeflag == 'c':
-                        option_prices.append(max(s1 - self.k, 0))
-                    elif self.typeflag == 'p':
-                        option_prices.append(max(self.k - s1, 0))
-                else:
-                    option_prices.append(self.rebate)
-                triggered = False
-
-        if self.barrier == "ui":
-            for i in range(MC_lens):
-                s1 = s
-                for j in range(T_lens):
-                    rand = random.gauss(0, 1)
-                    dS = (mu - 0.5*v**2) * dt + v*np.sqrt(dt) * rand
-                    s1 *= np.exp(dS)
-                    if s1 > self.h:
-                        triggered = True
-                if triggered:
-                    if self.typeflag == 'c':
-                        option_prices.append(max(s1 - self.k, 0))
-                    elif self.typeflag == 'p':
-                        option_prices.append(max(self.k - s1, 0))
-                else:
-                    option_prices.append(self.rebate)
-                triggered = False
-                    
-        return np.mean(option_prices) * np.exp(r*t)
-
-    
-    
-        
+        raise NotImplementedError("Halton Monte Carlo not deisgned for path-dependent options")
