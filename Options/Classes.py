@@ -473,8 +473,6 @@ class Barrier(Vanilla):
         self.timetype = _timetype
         self.Ndays1year = _Ndays1year
         
-        self.greeks = {}
-        
         if self.timetype == 'days':
             self.t = _t/252
         elif self.timetype == 'years':
@@ -575,42 +573,109 @@ class Barrier(Vanilla):
                     value = C + E
                 elif self.k <= h:
                     value = A - B + D + E
+                if type(s) == float and s < self.h:
+                    kwargs["s"] = s
+                    return Vanilla.valuation(self, **kwargs)
+                elif type(s) == np.ndarray:
+                    if type(t) == np.ndarray:
+                        kwargs["t"] = t[s < self.h]
+                    if type(v) == np.ndarray:
+                        kwargs["v"] = v[s < self.h]
+                    kwargs["s"] = s[s < self.h]
+                    value[s < self.h] = Vanilla.valuation(self, **kwargs)
+                        
             elif self.barrier == "ui":
                 if self.k > h:
                     value = A + E
                 elif self.k <= h:
                     value = B - C + D + E
+                if type(s) == float and s > self.h:
+                    kwargs["s"] = s
+                    return Vanilla.valuation(self, **kwargs)
+                elif type(s) == np.ndarray:
+                    if type(t) == np.ndarray:
+                        kwargs["t"] = t[s > self.h]
+                    if type(v) == np.ndarray:
+                        kwargs["v"] = v[s > self.h]
+                    kwargs["s"] = s[s > self.h]
+                    value[s > self.h] = Vanilla.valuation(self, **kwargs)
+            
             elif self.barrier == "do":
                 if self.k > h:
                     value = A - C + F
                 elif self.k <= h:
                     value = B - D + F
+                if type(value) == float:
+                    if value < 0:
+                        value = 0
+                elif type(value) == np.ndarray:
+                    value[s < self.h] = 0
+            
             elif self.barrier == "uo":
                 if self.k > h:
                     value = F
                 elif self.k <= h:
                     value = A - B + C - D + F
+                if type(value) == float:
+                    if value < 0:
+                        value = 0
+                elif type(value) == np.ndarray:
+                    value[s > self.h] = 0
+
         elif self.typeflag == 'p':
             if self.barrier == "di":
                 if self.k > h:
                     value = B - C + D + E
                 elif self.k <= h:
                     value = A + E
+                if type(s) == float and s < self.h:
+                    kwargs["s"] = s
+                    return Vanilla.valuation(self, **kwargs)
+                elif type(s) == np.ndarray:
+                    if type(t) == np.ndarray:
+                        kwargs["t"] = t[s < self.h]
+                    if type(v) == np.ndarray:
+                        kwargs["v"] = v[s < self.h]
+                    kwargs["s"] = s[s < self.h]
+                    value[s < self.h] = Vanilla.valuation(self, **kwargs)
+
             elif self.barrier == "ui":
                 if self.k > h:
                     value = A - B + D + E
                 elif self.k <= h:
                     value = C + E
+                if type(s) == float and s > self.h:
+                    kwargs["s"] = s
+                    return Vanilla.valuation(self, **kwargs)
+                elif type(s) == np.ndarray:
+                    if type(t) == np.ndarray:
+                        kwargs["t"] = t[s > self.h]
+                    if type(v) == np.ndarray:
+                        kwargs["v"] = v[s > self.h]
+                    kwargs["s"] = s[s > self.h]
+                    value[s > self.h] = Vanilla.valuation(self, **kwargs)
+
             elif self.barrier == "do":
                 if self.k > h:
                     value = A - B + C - D + F
                 elif self.k <= h:
                     value = F
+                if type(value) == float:
+                    if value < 0:
+                        value = 0
+                elif type(value) == np.ndarray:
+                    value[s < self.h] = 0
+
             elif self.barrier == "uo":
                 if self.k > h:
                     value = B - D + F
                 elif self.k <= h:
                     value = A - C + F
+                if type(value) == float:
+                    if value < 0:
+                        value = 0
+                elif type(value) == np.ndarray:
+                    value[s > self.h] = 0
         
         return value 
 
@@ -636,12 +701,15 @@ class Barrier(Vanilla):
             d = kwargs['d']
         except:
             d = 1 / 10000
-            
+        
         su = s + d*s # 1bps changes
         sd = s - d*s
         
-        vu = self.valuation(s = su, **kwargs)
-        vd = self.valuation(s = sd, **kwargs)
+        kwargs['s'] = su
+        vu = self.valuation(**kwargs)
+
+        kwargs['s'] = sd
+        vd = self.valuation(**kwargs)
         
         return (vu - vd) / (su - sd)
 
@@ -670,10 +738,15 @@ class Barrier(Vanilla):
             
         su = s + d*s # 1bps changes
         sd = s - d*s
-        
-        v0 = self.valuation(s = s, **kwargs)
-        vu = self.valuation(s = su, **kwargs)
-        vd = self.valuation(s = sd, **kwargs)
+
+        kwargs['s'] = s
+        v0 = self.valuation(**kwargs)
+
+        kwargs['s'] = su
+        vu = self.valuation(**kwargs)
+
+        kwargs['s'] = sd
+        vd = self.valuation(**kwargs)
         
         return (vu + vd - 2*v0) / ((su - sd)**2)
 
@@ -701,9 +774,12 @@ class Barrier(Vanilla):
             
         sigu = v + d*v # 1bps changes
         sigd = v - d*v
-        
-        vu = self.valuation(v = sigu, **kwargs)
-        vd = self.valuation(v = sigd, **kwargs)
+
+        kwargs['v'] = sigu
+        vu = self.valuation(**kwargs)
+
+        kwargs['v'] = sigd
+        vd = self.valuation(**kwargs)
         
         return (vu - vd) / (sigu - sigd)
 
@@ -731,9 +807,12 @@ class Barrier(Vanilla):
             
         tu = t + d*t # 1bps changes
         td = t - d*t
-        
-        vu = self.valuation(t = tu, **kwargs)
-        vd = self.valuation(t = td, **kwargs)
+
+        kwargs['t'] = tu
+        vu = self.valuation(**kwargs)
+
+        kwargs['t'] = td
+        vd = self.valuation(**kwargs)
         
         # Theta 是关于时间的衰减（取负数）
         
