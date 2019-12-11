@@ -704,14 +704,39 @@ class Barrier(Vanilla):
         
         su = s + d*s # 1bps changes
         sd = s - d*s
-        
+
+        if self.barrier[0] == "d":
+            if type(s) == float:
+                if sd > self.h:
+                    pass
+                elif sd <= self.h and s > self.h:
+                    sd = s
+                elif s <= self.h and su > self.h:
+                    su = s
+            elif type(s) == np.ndarray:
+                sd[(sd <= self.h)&(s > self.h)] = s[(sd <= self.h)&(s > self.h)]
+                su[(s <= self.h)&(su > self.h)] = s[(s <= self.h)&(su > self.h)]
+
+        elif self.barrier[0] == "u":
+            if type(s) == float:
+                if sd < self.h:
+                    pass
+                elif su >= self.h and s < self.h:
+                    su = s
+                elif s >= self.h and sd < self.h:
+                    sd = s
+            elif type(s) == np.ndarray:
+                su[(su >= self.h)&(s < self.h)] = s[(su >= self.h)&(s < self.h)]
+                sd[(s >= self.h)&(sd < self.h)] = s[(s >= self.h)&(sd < self.h)]
+
         kwargs['s'] = su
         vu = self.valuation(**kwargs)
-
         kwargs['s'] = sd
         vd = self.valuation(**kwargs)
         
-        return (vu - vd) / (su - sd)
+        greek = (vu - vd) / (su - sd)
+            
+        return greek
 
 
     def gamma(self, **kwargs):
@@ -739,6 +764,34 @@ class Barrier(Vanilla):
         su = s + d*s # 1bps changes
         sd = s - d*s
 
+        if self.barrier[0] == "d":
+            if type(s) == float:
+                if sd > self.h:
+                    pass
+                elif sd <= self.h and s > self.h:
+                    sd, s, su = s, su, su+d*s
+                elif s <= self.h and su > self.h:
+                    su, s, sd = s, sd, sd-d*s
+            elif type(s) == np.ndarray:
+                int_1 = (sd <= self.h)&(s > self.h)
+                sd[int_1], s[int_1], su[int_1] = s[int_1], su[int_1], su[int_1]+d*s[int_1]
+                int_2 = (s <= self.h)&(su > self.h)
+                su[int_2], s[int_2], sd[int_2] = s[int_2], sd[int_2], sd[int_2]-d*s[int_2]
+
+        elif self.barrier[0] == "u":
+            if type(s) == float:
+                if sd < self.h:
+                    pass
+                elif su >= self.h and s < self.h:
+                    su = s
+                elif s >= self.h and sd < self.h:
+                    sd = s
+            elif type(s) == np.ndarray:
+                int_1 = (su >= self.h)&(s < self.h)
+                su[int_1], s[int_1], sd[int_1] = s[int_1], sd[int_1], sd[int_1]-d*s[int_1]
+                int_2 = (s >= self.h)&(sd < self.h)
+                sd[int_2], s[int_2], su[int_2] = s[int_2], su[int_2], su[int_2]+d*s[int_2]
+
         kwargs['s'] = s
         v0 = self.valuation(**kwargs)
 
@@ -748,8 +801,9 @@ class Barrier(Vanilla):
         kwargs['s'] = sd
         vd = self.valuation(**kwargs)
         
-        return (vu + vd - 2*v0) / ((su - sd)**2)
+        greek = ((vu-v0)/(su-s) - (v0-vd)/(s-sd))/ ((su-sd)/2)
 
+        return greek
 
     def vega(self, **kwargs):
         '''
