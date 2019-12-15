@@ -441,6 +441,92 @@ class Vanilla:
             est_prc = self.Halton_MonteCarloGenerate(s, filename, MC_lens, T_lens, MCMethod)
         return est_prc
 
+    def American_valuation(self, M=100, N=600, omega=1.5, tol=0.001, **kwargs):
+        '''
+        -------------------------------------------------
+        提供3个可变参数：s、v、t，对于没有指定的参数，将使用定义类时确定的参数
+        t的类型与定义类时使用的相同
+        eg: value = Vanilla.valuation(s=np.array([0.9,1,1.1]), v=0.21)
+        若指定参数中有向量，则向量的长度需相同
+
+
+        '''
+        try:
+            s = kwargs['s']
+        except:
+            s = self.s
+
+        try:
+            v = kwargs['v']
+        except:
+            v = self.v
+
+        try:
+            t = kwargs['t']
+            if self.timetype == 'days':
+                t = t / 252
+        except:
+            t = self.t
+
+        Smax = 2 * s
+        ds = Smax / M
+        dt = t / N
+        mu = self.r - self.q
+        newval = np.zeros(M - 1)
+        vetS = np.arange(0, Smax + ds, ds)
+        veti = range(0, N + 1)
+        vetj = vetS / ds
+        # set up boundary condition
+        if self.typeflag=='p':
+            vetSs = self.k - vetS[1:M]
+            payoff = np.where(vetSs > 0, vetSs, 0)
+            pastval = payoff
+            boundval = self.k * np.ones(N + 1)
+        elif self.typeflag=='c':
+            vetSs = vetS[1:M] - self.k
+            payoff = np.where(vetSs > 0, vetSs, 0)
+            pastval = payoff
+            boundval = (Smax-self.k) * np.ones(N + 1)
+        # set the cofficients
+        alpha = 0.25 * dt * (v ** 2 * np.multiply(vetj, vetj) - mu * vetj)
+        beta = -dt * 0.5 * (v ** 2 * np.multiply(vetj, vetj) + mu)
+        gamma = 0.25 * dt * (v ** 2 * np.multiply(vetj, vetj) + mu * vetj)
+        M2 = np.diag(alpha[2:M], -1) + np.diag(1 + beta[1:M]) + np.diag(gamma[1:M - 1], 1)
+        # solve the sequence of linear system
+        aux = np.zeros(M - 1)
+        oldval = np.zeros(M - 1)
+        for i in range(N, 0, -1):
+            aux[0] = alpha[1] * (boundval[i - 1] + boundval[i])
+            rhs = np.dot(M2, pastval[:]) + aux
+            oldval = pastval
+            error = 100
+            while tol < error:
+                pricetest = oldval[0] + omega / (1 - beta[1]) * (
+                        rhs[0] - (1 - beta[1]) * oldval[0] + gamma[1] * oldval[1])
+                newval[0] = max(payoff[0], pricetest)
+                for j in range(2, M - 1):
+                    newval[j - 1] = max(payoff[j - 1], oldval[j - 1] + omega / (1 - beta[j]) * (
+                            rhs[j - 1] + alpha[j] * newval[j - 2] - (1 - beta[j]) * oldval[j - 1] + gamma[j] * oldval[
+                        j]))
+                newval[M - 2] = max(payoff[M - 2], oldval[M - 2] + omega / (1 - beta[M - 1]) * (
+                        rhs[M - 2] + alpha[M - 1] * newval[M - 3] - (1 - beta[M - 1]) * oldval[M - 2]))
+                error = np.linalg.norm(newval - oldval, ord=2)
+                oldval = newval
+
+            pastval = newval
+        # find the closest point
+        newval = np.insert(newval, 0, boundval[0])
+        newval=np.append(newval,0)
+        jdown = int(np.floor(s / ds))
+        jup = int(np.ceil(s / ds))
+        if jdown == jup:
+            price = newval[jdown]
+        else:
+            price = newval[jdown] + (s - jdown * ds) * (newval[jup] - newval[jdown]) / ds
+
+        return price
+
+
 
 class Barrier(Vanilla):
     def __init__(self,_s, _k, _r, _q, _sigma, _t,
@@ -678,6 +764,69 @@ class Barrier(Vanilla):
                     value[s > self.h] = 0
         
         return value 
+
+    def Crank_Nicolson_barrier(self, M=250, N=500, **kwargs):
+        '''
+                -------------------------------------------------
+                提供3个可变参数：s、v、t，对于没有指定的参数，将使用定义类时确定的参数
+                t的类型与定义类时使用的相同
+                默认网格数目1000*1000 Smax默认是两倍的S
+                由于不同barrier的PDE条件不同，先以down and out put为例
+                '''
+
+        if self.barrier is not 'do':
+            raise Exception("Invalid Type!", self.barrier)
+
+        try:
+            s = kwargs['s']
+        except:
+            s = self.s
+
+        try:
+            v = kwargs['v']
+        except:
+            v = self.v
+
+        try:
+            t = kwargs['t']
+            if self.timetype == 'days':
+                t = t / 252
+        except:
+            t = self.t
+        mu = self.r - self.q
+        Smax = 2 * s
+        ds = (Smax - self.h) / M
+        dt = (t / N)
+        matval = np.zeros((M + 1, N + 1))
+        VetS = np.arange(self.h, Smax + ds, ds)
+        veti = range(N, -1, -1)
+        vetj = VetS / ds
+        # set boundary condition
+        VetSs = self.k - VetS
+        matval[:, N] = np.where(VetSs > 0, VetSs, 0)
+        matval[0, :] = [self.rebate * np.exp(-mu * num * dt) for num in veti]
+        matval[M, :] = 0
+        # set cofficient matrix
+        alpha = 0.25 * dt * (v ** 2 * np.multiply(vetj, vetj) - mu * vetj)
+        beta = -dt * 0.5 * (v ** 2 * np.multiply(vetj, vetj) + mu)
+        gamma = 0.25 * dt * (v ** 2 * np.multiply(vetj, vetj) + mu * vetj)
+        M1 = np.diag(-alpha[2:M], -1) + np.diag(1 - beta[1:M]) - np.diag(gamma[1:M - 1], 1)
+        M2 = np.diag(alpha[2:M], -1) + np.diag(1 + beta[1:M]) + np.diag(gamma[1:M - 1], 1)
+        residual = np.zeros(M - 1)
+        for i in range(N, 0, -1):
+            residual[0] = alpha[0] * (matval[0, i - 1] + matval[0, i])
+            residual[-1] = gamma[-1] * (matval[M, i - 1] + matval[M, i])
+            interval = np.dot(M2, matval[1:M, i]) + residual
+            matval[1:M, i - 1] = np.dot(np.linalg.inv(M1), interval)
+        # find a closest point
+        jdown = int(np.floor((s - self.h) / ds))
+        jup = int(np.ceil((s - self.h) / ds))
+        if jdown == jup:
+            price = matval[jdown, 0]
+        else:
+            price = matval[jdown, 0] + (s - self.h - jdown * ds) * (matval[jup, 0] - matval[jdown, 0]) / ds
+
+        return price
 
 
 
