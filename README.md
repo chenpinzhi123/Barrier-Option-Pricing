@@ -1,7 +1,13 @@
-# DerivQuantGtjaProj
-Option Pricing 2019 for GTJA Project
+# DerivQuantG**aProj
+Option Pricing 2019 for G**A Project
 
 # 更新日志
+
+## 2019 / 12 / 15
+
+实现的功能：
+
+1. 实现了美式标准障碍期权的PDE数值解方法 (Contribtued by 王妮)
 
 ## 2019 / 12 / 11
 
