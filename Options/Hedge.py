@@ -66,14 +66,14 @@ def DeltaHedgeMonteCarlo(OptionClass, MC_lens, T_lens, **kwargs):
                     # Triggered
                     trigIndex = trigL[0]
                     c_paths[i, trigIndex:] = rebate * np.exp(-r*t_matrix[i, trigIndex:])
-                    c_delta[i, trigIndex:] = rebate * np.exp(-r*t_matrix[i, trigIndex:])
+                    c_delta[i, trigIndex:] = 0
             if OptionClass.barrier == "uo":
                 trigL = np.where(SAll[i,:] > h)[0]
                 if len(trigL) > 0:
                     # Triggered
                     trigIndex = trigL[0]
                     c_paths[i, trigIndex:] = rebate * np.exp(-r*t_matrix[i, trigIndex:])
-                    c_delta[i, trigIndex:] = rebate * np.exp(-r*t_matrix[i, trigIndex:])
+                    c_delta[i, trigIndex:] = 0
             if OptionClass.barrier == "di":
                 trigL = np.where(SAll[i,:] < h)[0]
                 if len(trigL) > 0:
@@ -103,3 +103,14 @@ def DeltaHedgeMonteCarlo(OptionClass, MC_lens, T_lens, **kwargs):
     pnl = dS_sum - dc_sum 
     
     return pnl
+
+def StaticDynamicDeltaHedgeMonteCarlo(OptionClass, MC_lens, T_lens, **kwargs):
+    """
+    Static:
+        Carr and Chou 1997
+    Dynamic:
+        Not optimal Ilhan and Sircar 2006.
+        Instead, more simple delta hedging on the unhedged deltas except from
+        static hedging portfolio
+    """
+    raise NotImplementedError

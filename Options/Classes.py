@@ -315,11 +315,11 @@ class Vanilla:
         在默认情况下，假设MC1_lens = MC_lens
         """
         if MC1_lens == None:
-            MC1_lens = MC_lens
+            MC1_lens = int(MC_lens / 10)
         
         mu = self.r - self.q
         
-        SAll = self.MonteCarloGenerate(St, filename, MC_lens, T_lens, MCMethod)
+        SAll = self.MonteCarloGenerate(St, filename, MC1_lens, T_lens, MCMethod)
 
         Optionprice = self.MCSolver(SAll, )
         Matcov = np.cov(Optionprice['OptionPrice'], Optionprice['LastPrice'])
@@ -327,7 +327,7 @@ class Vanilla:
         c = -Matcov[0, 1] / Var_s
         Exp_s = St * np.exp(mu * self.t)
 
-        SAll_con = self.MonteCarloGenerate(St, filename, MC1_lens, T_lens, MCMethod)
+        SAll_con = self.MonteCarloGenerate(St, filename, MC_lens, T_lens, MCMethod)
         Optionprice_con = self.MCSolver(SAll_con, )
         Control_price = Optionprice_con['OptionPrice'] + c * (Optionprice_con['LastPrice'] - Exp_s)
         
